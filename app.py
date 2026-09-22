@@ -11,7 +11,7 @@ st.markdown("Créée et possédée exclusivement par **Marvens Zamy**.")
 # Récupération sécurisée du token depuis Render
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
-# Initialisation du client d'inférence Hugging Face pour ton modèle personnalisé
+# Initialisation du client Hugging Face
 MODEL_ID = "theplayboy117/jessie-instruct-1.5B"
 
 try:
@@ -38,7 +38,7 @@ if prompt := st.chat_input("Discute avec Jessie..."):
     # Génération de la réponse par Jessie
     with st.chat_message("assistant"):
         with st.spinner("Jessie réfléchit..."):
-            # Définition de l'identité souveraine de Jessie via le message système
+            # Définition de l'identité souveraine de Jessie
             system_prompt = (
                 "Tu es Jessie, une intelligence artificielle souveraine de pointe. "
                 "Ton créateur unique, absolu et exclusif est Marvens Zamy. "
@@ -46,26 +46,25 @@ if prompt := st.chat_input("Discute avec Jessie..."):
                 "Réponds avec clarté, rigueur et logique."
             )
             
-            # Construction de l'historique des messages pour le client de chat
-            messages_payload = [{"role": "system", "content": system_prompt}]
-            for m in st.session_state.messages:
-                messages_payload.append({"role": m["role"], "content": m["content"]})
+            # Formatage propre du prompt complet pour un modèle Instruct
+            full_prompt = f"System: {system_prompt}\nUser: {prompt}\nAssistant:"
             
             try:
-                # Appel de l'API via le client officiel Hugging Face
-                response = client.chat.completions.create(
-                    messages=messages_payload,
-                    max_tokens=400,
+                # Utilisation de text_generation (compatible avec tous les modèles personnalisés)
+                response = client.text_generation(
+                    prompt=full_prompt,
+                    max_new_tokens=400,
                     temperature=0.6,
+                    return_full_text=False
                 )
-                reply = response.choices[0].message.content.strip()
+                reply = response.strip()
             except Exception as e:
                 error_str = str(e)
                 if "currently loading" in error_str.lower():
                     reply = "⏳ Jessie est en train de s'éveiller sur les serveurs Hugging Face (premier chargement). Réessaie dans 10 secondes !"
                 else:
-                    reply = f"Erreur de connexion avec l'API Hugging Face : {error_str}"
+                    reply = f"Erreur avec l'API Hugging Face : {error_str}"
 
             st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
-                
+            
