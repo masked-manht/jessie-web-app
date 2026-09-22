@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from huggingface_hub import InferenceClient
+import requests
 
 # Configuration de la page Streamlit
 st.set_page_config(page_title="Jessie - Intelligence Souveraine", page_icon="🤖")
@@ -11,13 +11,11 @@ st.markdown("Créée et possédée exclusivement par **Marvens Zamy**.")
 # Récupération sécurisée du token depuis Render
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
-# Initialisation du client Hugging Face
+# URL de l'API Serverless de ton modèle
 MODEL_ID = "theplayboy117/jessie-instruct-1.5B"
+API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
 
-try:
-    client = InferenceClient(model=MODEL_ID, token=HF_TOKEN if HF_TOKEN else None)
-except Exception as e:
-    st.error(f"Erreur d'initialisation du client Hugging Face : {e}")
+headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
 
 # Initialisation de l'historique de chat dans la session Streamlit
 if "messages" not in st.session_state:
@@ -46,26 +44,35 @@ if prompt := st.chat_input("Discute avec Jessie..."):
                 "Réponds avec clarté, rigueur et logique."
             )
             
-            # Formatage propre du prompt complet pour un modèle Instruct
             full_prompt = f"System: {system_prompt}\nUser: {prompt}\nAssistant:"
             
+            payload = {
+                "inputs": full_prompt,
+                "parameters": {
+                    "max_new_tokens": 400,
+                    "temperature": 0.6,
+                    "return_full_text": False
+                }
+            }
+            
             try:
-                # Utilisation de text_generation (compatible avec tous les modèles personnalisés)
-                response = client.text_generation(
-                    prompt=full_prompt,
-                    max_new_tokens=400,
-                    temperature=0.6,
-                    return_full_text=False
-                )
-                reply = response.strip()
-            except Exception as e:
-                # Capture détaillée pour afficher l'erreur exacte si elle survient
-                error_str = repr(e)
-                if "currently loading" in error_str.lower() or "503" in error_str:
-                    reply = "⏳ Jessie est en train de s'éveiller sur les serveurs Hugging Face. Réessaie dans 10 secondes !"
+                response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+                result = response.json()
+                
+                # Gestion des différents formats de retour possibles de l'API HF
+                if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
+                    reply = result[0]["generated_text"].strip()
+                elif isinstance(result, dict) and "error" in result:
+                    error_msg = result["error"]
+                    if "currently loading" in str(error_msg).lower():
+                        reply = "⏳ Jessie s'éveille sur les serveurs Hugging Face. Réessaie dans 15 secondes !"
+                    else:
+                        reply = f"⚠️ Erreur de l'API Hugging Face : {error_msg}"
                 else:
-                    reply = f"⚠️ Détail de l'erreur technique : {error_str}"
+                    reply = f"⚠️ Réponse inattendue du modèle : {str(result)}"
+            except Exception as e:
+                reply = f"⚠️ Erreur de connexion technique : {repr(e)}"
 
             st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
-            
+                    
