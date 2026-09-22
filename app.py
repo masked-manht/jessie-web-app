@@ -59,11 +59,12 @@ if prompt := st.chat_input("Discute avec Jessie..."):
                 )
                 reply = response.strip()
             except Exception as e:
-                error_str = str(e)
-                if "currently loading" in error_str.lower():
-                    reply = "⏳ Jessie est en train de s'éveiller sur les serveurs Hugging Face (premier chargement). Réessaie dans 10 secondes !"
+                # Capture détaillée pour afficher l'erreur exacte si elle survient
+                error_str = repr(e)
+                if "currently loading" in error_str.lower() or "503" in error_str:
+                    reply = "⏳ Jessie est en train de s'éveiller sur les serveurs Hugging Face. Réessaie dans 10 secondes !"
                 else:
-                    reply = f"Erreur avec l'API Hugging Face : {error_str}"
+                    reply = f"⚠️ Détail de l'erreur technique : {error_str}"
 
             st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
