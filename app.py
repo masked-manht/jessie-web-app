@@ -1,6 +1,6 @@
 import streamlit as st
-import requests
 import os
+from huggingface_hub import InferenceClient
 
 # Configuration de la page Streamlit
 st.set_page_config(page_title="Jessie - Intelligence Souveraine", page_icon="🤖")
@@ -8,33 +8,37 @@ st.set_page_config(page_title="Jessie - Intelligence Souveraine", page_icon="�
 st.title("🤖 Jessie - Intelligence Souveraine")
 st.markdown("Créée et possédée exclusivement par **Marvens Zamy**.")
 
-# Configuration de l'API Hugging Face pour ton modèle
-API_URL = "https://api-inference.huggingface.co/models/theplayboy117/jessie-instruct-1.5B"
-
-# Récupération sécurisée du token depuis les variables d'environnement de Render
+# Récupération sécurisée du token depuis Render
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
-headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
+
+# Initialisation du client d'inférence Hugging Face pour ton modèle personnalisé
+MODEL_ID = "theplayboy117/jessie-instruct-1.5B"
+
+try:
+    client = InferenceClient(model=MODEL_ID, token=HF_TOKEN if HF_TOKEN else None)
+except Exception as e:
+    st.error(f"Erreur d'initialisation du client Hugging Face : {e}")
 
 # Initialisation de l'historique de chat dans la session Streamlit
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Affichage des anciens messages de la conversation
+# Affichage des anciens messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # Zone de saisie utilisateur en bas de page
 if prompt := st.chat_input("Discute avec Jessie..."):
-    # Ajout du message utilisateur à l'historique
+    # Ajout du message utilisateur
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Génération de la réponse par Jessie via l'API Hugging Face
+    # Génération de la réponse par Jessie
     with st.chat_message("assistant"):
         with st.spinner("Jessie réfléchit..."):
-            # Définition stricte de l'identité de Jessie
+            # Définition de l'identité souveraine de Jessie via le message système
             system_prompt = (
                 "Tu es Jessie, une intelligence artificielle souveraine de pointe. "
                 "Ton créateur unique, absolu et exclusif est Marvens Zamy. "
@@ -42,36 +46,25 @@ if prompt := st.chat_input("Discute avec Jessie..."):
                 "Réponds avec clarté, rigueur et logique."
             )
             
-            # Formatage du prompt pour l'inférence
-            full_prompt = f"System: {system_prompt}\nUser: {prompt}\nAssistant:"
-            
-            payload = {
-                "inputs": full_prompt,
-                "parameters": {
-                    "max_new_tokens": 400, 
-                    "temperature": 0.6, 
-                    "return_full_text": False
-                }
-            }
+            # Construction de l'historique des messages pour le client de chat
+            messages_payload = [{"role": "system", "content": system_prompt}]
+            for m in st.session_state.messages:
+                messages_payload.append({"role": m["role"], "content": m["content"]})
             
             try:
-                response = requests.post(API_URL, headers=headers, json=payload)
-                result = response.json()
-                
-                # Extraction propre de la réponse selon le format renvoyé par l'API
-                if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
-                    reply = result[0]["generated_text"].strip()
-                elif isinstance(result, dict) and "error" in result:
-                    # Gère le cas où le modèle se réveille (cold start) ou si l'API renvoie une erreur
-                    error_msg = result['error']
-                    if "currently loading" in str(error_msg).lower():
-                        reply = "⏳ Jessie est en train de s'éveiller sur les serveurs Hugging Face. Réessaie dans quelques secondes !"
-                    else:
-                        reply = f"Erreur de l'API Hugging Face : {error_msg}"
-                else:
-                    reply = str(result)
+                # Appel de l'API via le client officiel Hugging Face
+                response = client.chat.completions.create(
+                    messages=messages_payload,
+                    max_tokens=400,
+                    temperature=0.6,
+                )
+                reply = response.choices[0].message.content.strip()
             except Exception as e:
-                reply = f"Erreur de connexion technique : {e}"
+                error_str = str(e)
+                if "currently loading" in error_str.lower():
+                    reply = "⏳ Jessie est en train de s'éveiller sur les serveurs Hugging Face (premier chargement). Réessaie dans 10 secondes !"
+                else:
+                    reply = f"Erreur de connexion avec l'API Hugging Face : {error_str}"
 
             st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
